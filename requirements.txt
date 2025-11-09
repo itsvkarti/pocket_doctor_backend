@@ -3,3 +3,9 @@ uvicorn[standard]
 pydantic
 matplotlib
 python-multipart
+fastapi
+uvicorn
+python-multipart        # for file uploads
+aiofiles                # async file write/read
+Pillow                  # image validation
+requests                # if calling external APIs
