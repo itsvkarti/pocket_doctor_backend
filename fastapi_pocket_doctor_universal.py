@@ -126,6 +126,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# --- Health + Upload endpoints ---
+from fastapi import UploadFile, File, BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse
+import aiofiles, os, uuid
+from PIL import Image
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@app.get("/", tags=["meta"])
+def root():
+    """Simple root endpoint so / and /docs don't 404."""
+    return JSONResponse({"message": "Pocket Doctor backend is live!"})
+
+@app.get("/health", tags=["meta"])
+def health():
+    return {"status": "ok"}
+
+@app.post("/upload", tags=["files"])
+async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+    if file.content_type.split("/")[0] not in {"image", "application"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    async with aiofiles.open(filepath, "wb") as out_file:
+        content = await file.read()
+        if len(content) > 10 * 1024 * 1024:  # 10 MB limit
+            raise HTTPException(status_code=413, detail="File too large")
+        await out_file.write(content)
+
+    try:
+        if file.content_type.startswith("image"):
+            img = Image.open(filepath)
+            img.verify()
+    except Exception:
+        os.remove(filepath)
+        raise HTTPException(status_code=400, detail="Invalid image")
+
+    if background_tasks is not None:
+        background_tasks.add_task(lambda: print(f"Analyzing {filepath}..."))  # placeholder
+
+    return {"upload_id": filename, "message": "File uploaded successfully"}
+
 
 
 # -------------------- Data models --------------------
