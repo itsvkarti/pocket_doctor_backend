@@ -45,6 +45,19 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 app = FastAPI(title="Pocket-Doctor Universal Agent (LLM-assisted MVP)")
+from fastapi.responses import JSONResponse
+
+@app.get("/", tags=["meta"])
+def root():
+    """
+    Simple health / root endpoint so / and /docs don't 404.
+    """
+    return JSONResponse({"message": "Pocket Doctor backend is live!"})
+
+@app.get("/health", tags=["meta"])
+def health():
+    return {"status": "ok"}
+
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
