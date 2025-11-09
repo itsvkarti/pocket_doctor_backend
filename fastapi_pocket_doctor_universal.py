@@ -45,6 +45,65 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 app = FastAPI(title="Pocket-Doctor Universal Agent (LLM-assisted MVP)")
+from fastapi import UploadFile, File, BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse
+from typing import Dict
+import aiofiles
+import os
+import uuid
+from PIL import Image
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# root/health already present
+@app.post("/upload", tags=["files"])
+async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+    # Basic validation
+    if file.content_type.split("/")[0] not in {"image", "application"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    # limit size (approx) - you can read stream to check exact size if needed
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    # Save file asynchronously
+    async with aiofiles.open(filepath, "wb") as out_file:
+        content = await file.read()
+        if len(content) > 10 * 1024 * 1024:  # 10 MB limit
+            raise HTTPException(status_code=413, detail="File too large")
+        await out_file.write(content)
+
+    # Optional sanity check for images (Pillow)
+    try:
+        if file.content_type.startswith("image"):
+            img = Image.open(filepath)
+            img.verify()
+    except Exception:
+        os.remove(filepath)
+        raise HTTPException(status_code=400, detail="Invalid image")
+
+    # Kick off background analysis (non-blocking)
+    if background_tasks is not None:
+        background_tasks.add_task(analyze_file_task, filepath)
+
+    return {"upload_id": filename, "message": "File uploaded, analysis started (async)"}
+
+# example background task - put AI call here
+def analyze_file_task(filepath: str):
+    # 1) Send file to AI model or ML pipeline
+    # 2) Store results in DB or storage
+    # 3) Optionally notify user (webhook/email)
+    try:
+        # pseudo-code: results = call_your_ai_api(filepath)
+        # For now we'll write a local JSON result file
+        result_path = filepath + ".result.json"
+        with open(result_path, "w") as f:
+            f.write('{"status":"analysis-complete","note":"dummy result, replace with AI call"}')
+    except Exception as e:
+        # log error
+        print("analysis error:", e)
+
 from fastapi.responses import JSONResponse
 
 @app.get("/", tags=["meta"])
